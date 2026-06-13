@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-app = FastAPI(title="Sparkling Studio Public Gateway & PWA")
+# 🌟 ध्यान दें: हमने docs_url="/api-docs" कर दिया है ताकि तुम्हारा कस्टम /docs रूट फ्री हो जाए!
+app = FastAPI(title="Sparkling Studio Public Gateway & PWA", docs_url="/api-docs")
 
 # CORS को चालू रखना
 app.add_middleware(
@@ -24,7 +25,7 @@ IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_super_secure_default_key")
 # 🔑 HF_TOKEN: प्राइवेट स्पेस को बाहर से एक्सेस करने के लिए बेहद ज़रूरी
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
-# स्टेटिक्स फोल्डर को माउंट करना
+# स्टेटिक्स फोल्डर को माउंट करना (तुम्हारे PWA आइकन्स यहीं से सर्व होंगे)
 if os.path.exists("statics"):
     app.mount("/statics", StaticFiles(directory="statics"), name="statics")
 
@@ -50,7 +51,7 @@ def get_secure_headers():
     return headers
 
 # ==========================================
-# 📱 PWA & STATIC ROUTING (मोबाइल ऐप सपोर्ट)
+# 📱 PWA & HTML ROUTING (UI & Docs)
 # ==========================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -63,6 +64,15 @@ async def serve_frontend():
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
     return "<h3>Error: index.html UI file not found in gateway!</h3>"
+
+# 🌟 नया रूट: तुम्हारे कस्टम API Docs पेज के लिए
+@app.get("/docs", response_class=HTMLResponse)
+async def serve_docs_page():
+    docs_path = os.path.join("templates", "docs.html")
+    if os.path.exists(docs_path):
+        with open(docs_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h3>Error: docs.html file not found in templates folder!</h3>"
 
 @app.get("/manifest.json")
 async def serve_manifest():
