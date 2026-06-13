@@ -19,7 +19,7 @@ app.add_middleware(
 
 # 🌐 एनवायरनमेंट वेरिएबल्स (इन्हें तुम वर्सल या पब्लिक HF स्पेस की सेटिंग्स में डालोगे)
 # 1. तुम्हारा प्राइवेट बैकएंड स्पेस का पूरा URL (जैसे: https://username-space.hf.space)
-BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://your-private-backend.hf.space")
+BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Aryan-x-imgen-v3.hf.space")
 # 2. तुम्हारी वह सीक्रेट की जो प्राइवेट बैकएंड को एक्सेस करने की अनुमति देगी
 IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_super_secure_default_key")
 
