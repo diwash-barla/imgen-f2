@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>API Documentation | Sparkling Studio Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050505;
+            --card: #121214;
+            --card-hover: #1a1a1f;
+            --accent: #8b5cf6;
+            --accent-dim: rgba(139, 92, 246, 0.15);
+            --text: #ffffff;
+            --text-dim: #a1a1aa;
+            --border: #1f1f23;
+            --success: #10b981;
+            --danger: #ef4444;
+            --code-bg: #0d0d0f;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'Urbanist', sans-serif;
+            margin: 0; padding: 0; line-height: 1.6;
+        }
+        header {
+            width: 100%; padding: 16px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            background: rgba(5, 5, 5, 0.85); backdrop-filter: blur(12px);
+            position: sticky; top: 0; z-index: 50;
+        }
+        .app-title { font-weight: 700; font-size: 22px; letter-spacing: -0.5px; }
+        .app-title span { color: var(--accent); }
+        .back-btn {
+            background: var(--card); border: 1px solid var(--border);
+            color: var(--text); padding: 8px 16px; border-radius: 12px;
+            font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 8px; transition: 0.2s;
+        }
+        .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+        
+        .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+        
+        h1 { font-size: 32px; margin-bottom: 10px; }
+        h2 { font-size: 24px; color: var(--accent); margin-top: 40px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        h3 { font-size: 18px; color: #e4e4e7; margin-top: 24px; }
+        p { color: var(--text-dim); font-size: 16px; }
+        
+        .endpoint-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 16px; padding: 24px; margin-top: 20px;
+        }
+        .method-badge {
+            display: inline-block; padding: 4px 12px; border-radius: 8px;
+            font-size: 12px; font-weight: 700; text-transform: uppercase; margin-right: 12px;
+        }
+        .method-post { background: rgba(139, 92, 246, 0.2); color: var(--accent); }
+        .method-get { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .endpoint-url { font-family: monospace; font-size: 16px; color: #e4e4e7; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-dim); font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { font-size: 15px; }
+        .param-name { font-weight: 600; color: #e4e4e7; }
+        .param-type { color: var(--accent); font-family: monospace; font-size: 13px; }
+        
+        /* Code Box UI */
+        .code-section { margin-top: 40px; }
+        .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+        .tab-btn {
+            background: transparent; border: none; color: var(--text-dim);
+            padding: 10px 20px; font-size: 14px; font-weight: 600;
+            cursor: pointer; border-bottom: 2px solid transparent; transition: 0.2s;
+        }
+        .tab-btn.active, .tab-btn:hover { color: var(--accent); border-bottom-color: var(--accent); }
+        
+        .code-container {
+            background: var(--code-bg); border: 1px solid var(--border);
+            border-radius: 16px; position: relative; overflow: hidden;
+        }
+        .code-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 16px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
+        }
+        .code-lang { font-size: 12px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; }
+        .copy-btn {
+            background: var(--card); border: 1px solid var(--border); color: var(--text-dim);
+            border-radius: 8px; padding: 4px 10px; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: 0.2s;
+        }
+        .copy-btn:hover { color: white; border-color: white; }
+        
+        pre { margin: 0; padding: 16px; overflow-x: auto; font-family: monospace; font-size: 14px; line-height: 1.5; color: #e4e4e7; }
+        .token-keyword { color: #8b5cf6; }
+        .token-string { color: #10b981; }
+        .token-comment { color: #52525b; }
+        .token-var { color: #3b82f6; }
+        
+        .code-pane { display: none; }
+        .code-pane.active { display: block; }
+        
+        /* Error Handling Box */
+        .error-box {
+            background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 16px; padding: 20px; margin-top: 20px;
+        }
+        .error-box h3 { color: var(--danger); margin-top: 0; }
+        .error-box ul { padding-left: 20px; color: var(--text-dim); margin-bottom: 0; }
+        .error-box li { margin-bottom: 8px; }
+
+        .svg-icon { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="app-title">Sparkling <span>API</span></div>
+        <a href="/" class="back-btn">
+            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            Back to Studio
+        </a>
+    </header>
+
+    <div class="container">
+        <h1>Developer API Documentation</h1>
+        <p>Integrate the power of Sparkling Studio Pro into your own applications. Our API uses a <strong>Task Polling Architecture</strong> to ensure absolute stability and bypass serverless execution timeouts (like Vercel). The Gateway securely handles all Heavy GPU routing and authorization invisibly.</p>
+
+        <h2>1. Endpoints</h2>
+        
+        <div class="endpoint-card">
+            <div><span class="method-badge method-post">POST</span> <span class="endpoint-url"><span class="dynamic-url">https://api.example.com</span>/api/generate</span></div>
+            <p style="margin-top: 16px;">Initiates a new image generation task. Returns a unique <code>task_id</code> immediately.</p>
+            
+            <h3>Request Body (JSON)</h3>
+            <table>
+                <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+                <tr><td class="param-name">prompt</td><td class="param-type">string</td><td>Required</td><td>Describe the scene (e.g., "Lord Shiva meditating in deep space").</td></tr>
+                <tr><td class="param-name">user_negative</td><td class="param-type">string</td><td>""</td><td>Elements to avoid in the image.</td></tr>
+                <tr><td class="param-name">style_name</td><td class="param-type">string</td><td>"Cinematic"</td><td>"Cinematic", "Realistic", "Anime", "Cosmic", "Oil Painting", "No Style"</td></tr>
+                <tr><td class="param-name">ratio</td><td class="param-type">string</td><td>"1:1"</td><td>"1:1", "16:9", "9:16", or "Custom"</td></tr>
+            </table>
+        </div>
+
+        <div class="endpoint-card">
+            <div><span class="method-badge method-get">GET</span> <span class="endpoint-url"><span class="dynamic-url">https://api.example.com</span>/api/status/{task_id}</span></div>
+            <p style="margin-top: 16px;">Poll this endpoint every 1-2 seconds using the <code>task_id</code> received from the generate endpoint to get the image status.</p>
+            
+            <h3>Response Statuses</h3>
+            <ul>
+                <li><span style="color:#a1a1aa;">queued</span>: Waiting for engine availability.</li>
+                <li><span style="color:var(--accent);">processing</span>: Currently generating via AI models.</li>
+                <li><span style="color:var(--success);">completed</span>: Generation done. Response includes <code>image</code> (Base64) and <code>seed</code>.</li>
+                <li><span style="color:var(--danger);">failed</span>: Task encountered an error. Response includes <code>error</code> message.</li>
+            </ul>
+        </div>
+
+        <h2>2. Code Examples</h2>
+        <p>Choose your preferred language. The Base URL is dynamically updated to match your current environment.</p>
+
+        <div class="code-section">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('python')">Python</button>
+                <button class="tab-btn" onclick="switchTab('node')">Node.js</button>
+                <button class="tab-btn" onclick="switchTab('curl')">cURL</button>
+            </div>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span class="code-lang" id="currentLangLabel">Python (Requests)</span>
+                    <button class="copy-btn" onclick="copyCode()">Copy Code</button>
+                </div>
+                
+                <div id="code-python" class="code-pane active">
+<pre><code><span class="token-keyword">import</span> requests
+<span class="token-keyword">import</span> time
+
+<span class="token-var">BASE_URL</span> = <span class="token-string">"<span class="dynamic-url">https://api.example.com</span>"</span>
+
+<span class="token-keyword">def</span> <span class="token-var">generate_image</span>():
+    <span class="token-comment"># 1. Start the Task</span>
+    payload = {
+        <span class="token-string">"prompt"</span>: <span class="token-string">"Lord Shiva meditating in deep space, glowing cosmic energy"</span>,
+        <span class="token-string">"style_name"</span>: <span class="token-string">"Cosmic"</span>,
+        <span class="token-string">"ratio"</span>: <span class="token-string">"16:9"</span>
+    }
+    
+    response = requests.post(<span class="token-keyword">f</span><span class="token-string">"{BASE_URL}/api/generate"</span>, json=payload)
+    data = response.json()
+    
+    <span class="token-keyword">if</span> data.get(<span class="token-string">"cached"</span>):
+        <span class="token-keyword">print</span>(<span class="token-string">"Magic Cache Hit! Image retrieved instantly."</span>)
+        <span class="token-keyword">return</span> data[<span class="token-string">"image"</span>]
+        
+    task_id = data[<span class="token-string">"task_id"</span>]
+    <span class="token-keyword">print</span>(<span class="token-keyword">f</span><span class="token-string">"Task Started: {task_id}. Polling for completion..."</span>)
+    
+    <span class="token-comment"># 2. Poll for Status</span>
+    <span class="token-keyword">while True</span>:
+        status_res = requests.get(<span class="token-keyword">f</span><span class="token-string">"{BASE_URL}/api/status/{task_id}"</span>).json()
+        status = status_res.get(<span class="token-string">"status"</span>)
+        
+        <span class="token-keyword">if</span> status == <span class="token-string">"completed"</span>:
+            <span class="token-keyword">print</span>(<span class="token-string">"Generation Successful!"</span>)
+            <span class="token-keyword">return</span> status_res[<span class="token-string">"image"</span>]
+        <span class="token-keyword">elif</span> status == <span class="token-string">"failed"</span>:
+            <span class="token-keyword">raise Exception</span>(status_res.get(<span class="token-string">"error"</span>, <span class="token-string">"Unknown generation error"</span>))
+            
+        time.sleep(<span class="token-var">1.5</span>)
+
+image_base64 = generate_image()</code></pre>
+                </div>
+
+                <div id="code-node" class="code-pane">
+<pre><code><span class="token-keyword">const</span> <span class="token-var">BASE_URL</span> = <span class="token-string">"<span class="dynamic-url">https://api.example.com</span>"</span>;
+
+<span class="token-keyword">async function</span> <span class="token-var">generateImage</span>() {
+    <span class="token-comment">// 1. Start the Task</span>
+    <span class="token-keyword">const</span> payload = {
+        prompt: <span class="token-string">"Lord Shiva meditating in deep space, glowing cosmic energy"</span>,
+        style_name: <span class="token-string">"Cosmic"</span>,
+        ratio: <span class="token-string">"16:9"</span>
+    };
+
+    <span class="token-keyword">let</span> res = <span class="token-keyword">await</span> fetch(<span class="token-keyword">`</span><span class="token-string">${BASE_URL}/api/generate</span><span class="token-keyword">`</span>, {
+        method: <span class="token-string">'POST'</span>,
+        headers: { <span class="token-string">'Content-Type'</span>: <span class="token-string">'application/json'</span> },
+        body: JSON.stringify(payload)
+    });
+    <span class="token-keyword">let</span> data = <span class="token-keyword">await</span> res.json();
+
+    <span class="token-keyword">if</span> (data.cached) {
+        console.log(<span class="token-string">"Magic Cache Hit! Image retrieved instantly."</span>);
+        <span class="token-keyword">return</span> data.image;
+    }
+
+    <span class="token-keyword">const</span> taskId = data.task_id;
+    console.log(<span class="token-keyword">`</span><span class="token-string">Task Started: ${taskId}. Polling...</span><span class="token-keyword">`</span>);
+
+    <span class="token-comment">// 2. Poll for Status</span>
+    <span class="token-keyword">while</span> (<span class="token-keyword">true</span>) {
+        <span class="token-keyword">let</span> statusRes = <span class="token-keyword">await</span> fetch(<span class="token-keyword">`</span><span class="token-string">${BASE_URL}/api/status/${taskId}</span><span class="token-keyword">`</span>);
+        <span class="token-keyword">let</span> statusData = <span class="token-keyword">await</span> statusRes.json();
+
+        <span class="token-keyword">if</span> (statusData.status === <span class="token-string">'completed'</span>) {
+            console.log(<span class="token-string">"Generation Successful!"</span>);
+            <span class="token-keyword">return</span> statusData.image;
+        } <span class="token-keyword">else if</span> (statusData.status === <span class="token-string">'failed'</span>) {
+            <span class="token-keyword">throw new Error</span>(statusData.error);
+        }
+
+        <span class="token-keyword">await new Promise</span>(resolve => setTimeout(resolve, <span class="token-var">1500</span>));
+    }
+}
+
+generateImage();</code></pre>
+                </div>
+
+                <div id="code-curl" class="code-pane">
+<pre><code><span class="token-comment"># 1. Start the Task</span>
+curl -X POST <span class="token-string">"<span class="dynamic-url">https://api.example.com</span>/api/generate"</span> \
+     -H <span class="token-string">"Content-Type: application/json"</span> \
+     -d <span class="token-string">'{
+           "prompt": "Lord Shiva meditating in deep space, glowing cosmic energy",
+           "style_name": "Cosmic",
+           "ratio": "16:9"
+         }'</span>
+
+<span class="token-comment"># You will receive a response like: {"status":"accepted","task_id":"abc-123",...}</span>
+
+<span class="token-comment"># 2. Check Status (Replace abc-123 with your actual task_id)</span>
+curl -X GET <span class="token-string">"<span class="dynamic-url">https://api.example.com</span>/api/status/abc-123"</span></code></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="error-box">
+            <h3>Error Handling & Responses</h3>
+            <p>Our API uses standard HTTP status codes combined with JSON error descriptions.</p>
+            <ul>
+                <li><strong>200 OK:</strong> Request succeeded. Always check the JSON <code>status</code> field.</li>
+                <li><strong>404 Not Found:</strong> The <code>task_id</code> does not exist or has expired from the live queue.</li>
+                <li><strong>500 Internal Error:</strong> The Gateway could not communicate with the Private Heavy-Logic Backend.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 1. Dynamically Inject Host URL based on where the app is running
+        document.addEventListener("DOMContentLoaded", () => {
+            const currentOrigin = window.location.origin;
+            document.querySelectorAll('.dynamic-url').forEach(el => {
+                el.textContent = currentOrigin;
+            });
+        });
+
+        // 2. Tab Switching Logic
+        function switchTab(lang) {
+            // Update Buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update Code Panes
+            document.querySelectorAll('.code-pane').forEach(pane => pane.classList.remove('active'));
+            document.getElementById(`code-${lang}`).classList.add('active');
+            
+            // Update Label
+            const labels = {
+                'python': 'Python (Requests)',
+                'node': 'Node.js (Fetch)',
+                'curl': 'Bash (cURL)'
+            };
+            document.getElementById('currentLangLabel').textContent = labels[lang];
+        }
+
+        // 3. Copy Code Logic
+        function copyCode() {
+            const activePane = document.querySelector('.code-pane.active pre code');
+            const codeText = activePane.innerText;
+            
+            navigator.clipboard.writeText(codeText).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = "Copied! ✓";
+                btn.style.color = "var(--success)";
+                btn.style.borderColor = "var(--success)";
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.color = "var(--text-dim)";
+                    btn.style.borderColor = "var(--border)";
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
