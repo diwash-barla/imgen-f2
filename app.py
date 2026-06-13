@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 app = FastAPI(title="Sparkling Studio Public Gateway & PWA")
 
-# CORS को चालू रखना ताकि फ्रंटएंड और ब्राउज़र में कोई अड़चन न आए
+# CORS को चालू रखना
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,17 +17,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🌐 एनवायरनमेंट वेरिएबल्स (इन्हें तुम वर्सल या पब्लिक HF स्पेस की सेटिंग्स में डालोगे)
-# 1. तुम्हारा प्राइवेट बैकएंड स्पेस का पूरा URL (जैसे: https://username-space.hf.space)
+# 🌐 एनवायरनमेंट वेरिएबल्स (वर्सल या पब्लिक HF स्पेस की सेटिंग्स के लिए)
 BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Aryan-x-imgen-v3.hf.space")
-# 2. तुम्हारी वह सीक्रेट की जो प्राइवेट बैकएंड को एक्सेस करने की अनुमति देगी
 IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_super_secure_default_key")
 
-# स्टेटिक्स फोल्डर को माउंट करना (इमेजेस, लोगोज़ और एसेट्स के लिए)
+# 🔑 HF_TOKEN: प्राइवेट स्पेस को बाहर से एक्सेस करने के लिए बेहद ज़रूरी
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+
+# स्टेटिक्स फोल्डर को माउंट करना
 if os.path.exists("statics"):
     app.mount("/statics", StaticFiles(directory="statics"), name="statics")
 
-# HTTPX का एक एसिंक क्लाइंट जो बैकएंड से सुपरफास्ट बात करेगा
+# HTTPX का एसिंक क्लाइंट
 async_client = httpx.AsyncClient(timeout=30.0)
 
 class ImageRequestGateway(BaseModel):
@@ -41,18 +42,23 @@ class ImageRequestGateway(BaseModel):
     use_random: bool = True
     force_queue: bool = False
 
+# 🛡️ हेडर जेनरेटर: इसमें हमारा कस्टम पासवर्ड और HF Token दोनों होंगे
+def get_secure_headers():
+    headers = {"X-API-Key": IMGEN_API_KEY}
+    if HF_TOKEN:
+        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+    return headers
+
 # ==========================================
 # 📱 PWA & STATIC ROUTING (मोबाइल ऐप सपोर्ट)
 # ==========================================
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
-    # यह templates फोल्डर के अंदर से तुम्हारा मुख्य UI सर्व करेगा
     html_path = os.path.join("templates", "index.html")
     if os.path.exists(html_path):
         with open(html_path, "r", encoding="utf-8") as f:
             return f.read()
-    # अगर templates में न हो, तो रूट पर चेक करेगा
     elif os.path.exists("index.html"):
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
@@ -79,10 +85,8 @@ async def serve_service_worker():
 @app.post("/api/generate")
 async def gateway_generate(req: ImageRequestGateway):
     url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/generate"
-    headers = {"X-API-Key": IMGEN_API_KEY}
-    
     try:
-        response = await async_client.post(url, json=req.dict(), headers=headers)
+        response = await async_client.post(url, json=req.dict(), headers=get_secure_headers())
         return response.json()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
@@ -90,10 +94,8 @@ async def gateway_generate(req: ImageRequestGateway):
 @app.get("/api/status/{task_id}")
 async def gateway_status(task_id: str):
     url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/status/{task_id}"
-    headers = {"X-API-Key": IMGEN_API_KEY}
-    
     try:
-        response = await async_client.get(url, headers=headers)
+        response = await async_client.get(url, headers=get_secure_headers())
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail="Task not found on backend")
         return response.json()
@@ -103,10 +105,8 @@ async def gateway_status(task_id: str):
 @app.get("/api/queue")
 async def gateway_queue():
     url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/queue"
-    headers = {"X-API-Key": IMGEN_API_KEY}
-    
     try:
-        response = await async_client.get(url, headers=headers)
+        response = await async_client.get(url, headers=get_secure_headers())
         return response.json()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
@@ -114,10 +114,8 @@ async def gateway_queue():
 @app.get("/api/history")
 async def gateway_history(skip: int = 0, limit: int = 10):
     url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/history?skip={skip}&limit={limit}"
-    headers = {"X-API-Key": IMGEN_API_KEY}
-    
     try:
-        response = await async_client.get(url, headers=headers)
+        response = await async_client.get(url, headers=get_secure_headers())
         return response.json()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
@@ -125,17 +123,14 @@ async def gateway_history(skip: int = 0, limit: int = 10):
 @app.delete("/api/history/{item_id}")
 async def gateway_delete_history(item_id: str):
     url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/history/{item_id}"
-    headers = {"X-API-Key": IMGEN_API_KEY}
-    
     try:
-        response = await async_client.delete(url, headers=headers)
+        response = await async_client.delete(url, headers=get_secure_headers())
         if response.status_code == 404:
             raise HTTPException(status_code=404, detail="Item not found on backend")
         return response.json()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
 
-# वर्सल के लिए एंट्री पॉइंट (Uvicorn लोकल रन करने के लिए भी काम आएगा)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
