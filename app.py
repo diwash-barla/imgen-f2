@@ -21,8 +21,8 @@ app.add_middleware(
 )
 
 # 🌐 एनवायरनमेंट वेरिएबल्स
-BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Aryan-x-imgen-v3.hf.space")
-IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_super_secure_default_key")
+BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Dws321-Imgen-b2.hf.space")
+IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_dumy_key")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 # स्टेटिक्स फोल्डर को माउंट करना
