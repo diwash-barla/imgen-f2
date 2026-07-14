@@ -1,15 +1,17 @@
 import os
-import httpx
+import uuid
+import base64
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from gradio_client import Client  # HTTPX की जगह अब यह HF Spaces से बात करेगा
 
-# 🌟 ध्यान दें: हमने docs_url="/api-docs" कर दिया है ताकि तुम्हारा कस्टम /docs रूट फ्री हो जाए!
+# 🌟 PWA & API Gateway Setup
 app = FastAPI(title="Sparkling Studio Public Gateway & PWA", docs_url="/api-docs")
 
-# CORS को चालू रखना
+# CORS चालू रखना
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,42 +20,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🌐 एनवायरनमेंट वेरिएबल्स (वर्सल या पब्लिक HF स्पेस की सेटिंग्स के लिए)
+# 🌐 एनवायरनमेंट वेरिएबल्स
 BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Aryan-x-imgen-v3.hf.space")
 IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_super_secure_default_key")
-
-# 🔑 HF_TOKEN: प्राइवेट स्पेस को बाहर से एक्सेस करने के लिए बेहद ज़रूरी
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
-# स्टेटिक्स फोल्डर को माउंट करना (तुम्हारे PWA आइकन्स यहीं से सर्व होंगे)
+# स्टेटिक्स फोल्डर को माउंट करना
 if os.path.exists("statics"):
     app.mount("/statics", StaticFiles(directory="statics"), name="statics")
-
-# HTTPX का एसिंक क्लाइंट
-async_client = httpx.AsyncClient(timeout=30.0)
 
 class ImageRequestGateway(BaseModel):
     prompt: str
     user_negative: str = ""
     style_name: str = "Cinematic"
     ratio: str = "1:1"
-    custom_width: int = 1024
-    custom_height: int = 1024
     custom_seed: int = 0
     use_random: bool = True
+    # Extra params (UI से आते हैं, लेकिन बैकएंड को ज़रूरत नहीं है)
+    custom_width: int = 1024
+    custom_height: int = 1024
     force_queue: bool = False
 
-# 🛡️ हेडर जेनरेटर: इसमें हमारा कस्टम पासवर्ड और HF Token दोनों होंगे
-def get_secure_headers():
-    headers = {"X-API-Key": IMGEN_API_KEY}
-    if HF_TOKEN:
-        headers["Authorization"] = f"Bearer {HF_TOKEN}"
-    return headers
+# ==========================================
+# 🔌 GRADIO CLIENT & QUEUE MANAGER
+# ==========================================
+# Lazy Loading: ताकि स्टार्टअप के समय बैकएंड स्लीप मोड में हो तो गेटवे क्रैश न हो
+_client = None
+def get_client():
+    global _client
+    if _client is None:
+        print("Gateway: Connecting to Backend Engine...")
+        _client = Client(BACKEND_SERVER_URL, hf_token=HF_TOKEN)
+    return _client
+
+# इन-मेमोरी टास्क मैनेजर (Frontend के Task Polling को संभालने के लिए)
+active_tasks = {}
 
 # ==========================================
 # 📱 PWA & HTML ROUTING (UI & Docs)
 # ==========================================
-
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
     html_path = os.path.join("templates", "index.html")
@@ -65,7 +70,6 @@ async def serve_frontend():
             return f.read()
     return "<h3>Error: index.html UI file not found in gateway!</h3>"
 
-# 🌟 नया रूट: तुम्हारे कस्टम API Docs पेज के लिए
 @app.get("/docs", response_class=HTMLResponse)
 async def serve_docs_page():
     docs_path = os.path.join("templates", "docs.html")
@@ -89,57 +93,84 @@ async def serve_service_worker():
     return {"error": "sw.js not found"}
 
 # ==========================================
-# 🛡️ API GATEWAY PROXY ENDPOINTS (सुरक्षा कवच)
+# 🛡️ API GATEWAY PROXY ENDPOINTS
 # ==========================================
-
 @app.post("/api/generate")
 async def gateway_generate(req: ImageRequestGateway):
-    url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/generate"
     try:
-        response = await async_client.post(url, json=req.dict(), headers=get_secure_headers())
-        return response.json()
-    except httpx.HTTPError as e:
+        client = get_client()
+        # .submit() बैकग्राउंड में रिक्वेस्ट भेजकर तुरंत एक Job ऑब्जेक्ट रिटर्न करता है
+        job = client.submit(
+            req.prompt, 
+            req.user_negative, 
+            req.style_name, 
+            req.ratio, 
+            req.custom_seed, 
+            req.use_random, 
+            IMGEN_API_KEY, 
+            api_name="/generate"
+        )
+        task_id = str(uuid.uuid4())
+        active_tasks[task_id] = job
+        
+        # Frontend को वही पुराना response दे रहे हैं जिसकी उसे आदत है
+        return {"status": "accepted", "task_id": task_id, "cached": False}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
 
 @app.get("/api/status/{task_id}")
 async def gateway_status(task_id: str):
-    url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/status/{task_id}"
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found or expired")
+    
+    job = active_tasks[task_id]
     try:
-        response = await async_client.get(url, headers=get_secure_headers())
-        if response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Task not found on backend")
-        return response.json()
-    except httpx.HTTPError as e:
+        status_info = job.status()
+        status_name = status_info.code.name # PENDING, STARTING, PROCESSING, FINISHED, FAILED
+        
+        if status_name in ["PENDING", "STARTING", "PROCESSING"]:
+            return {"status": "processing"}
+            
+        elif status_name == "FINISHED":
+            # जब इमेज बन जाती है, तो Gradio Client उसे टेम्परेरी फोल्डर में डाउनलोड कर लेता है
+            outputs = job.outputs()
+            image_filepath = outputs[0]
+            seed = outputs[1]
+            
+            # Frontend को Base64 चाहिए, तो हम इमेज पढ़कर कन्वर्ट कर देंगे
+            with open(image_filepath, "rb") as f:
+                encoded_string = base64.b64encode(f.read()).decode('utf-8')
+                base64_final = f"data:image/png;base64,{encoded_string}"
+            
+            # मेमोरी साफ़ करना
+            del active_tasks[task_id]
+            
+            return {"status": "completed", "image": base64_final, "seed": seed}
+            
+        elif status_name == "FAILED":
+            del active_tasks[task_id]
+            return {"status": "failed", "error": "Generation failed on the backend engine."}
+            
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}
+
+@app.get("/api/history")
+async def gateway_history(skip: int = 0, limit: int = 10):
+    try:
+        client = get_client()
+        # .predict() वेट (block) करता है और सीधा रिजल्ट देता है (History के लिए परफेक्ट है)
+        response = client.predict(skip, limit, IMGEN_API_KEY, api_name="/history")
+        return response
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
 
 @app.get("/api/queue")
 async def gateway_queue():
-    url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/queue"
-    try:
-        response = await async_client.get(url, headers=get_secure_headers())
-        return response.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
-
-@app.get("/api/history")
-async def gateway_history(skip: int = 0, limit: int = 10):
-    url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/history?skip={skip}&limit={limit}"
-    try:
-        response = await async_client.get(url, headers=get_secure_headers())
-        return response.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
-
-@app.delete("/api/history/{item_id}")
-async def gateway_delete_history(item_id: str):
-    url = f"{BACKEND_SERVER_URL.rstrip('/')}/api/history/{item_id}"
-    try:
-        response = await async_client.delete(url, headers=get_secure_headers())
-        if response.status_code == 404:
-            raise HTTPException(status_code=404, detail="Item not found on backend")
-        return response.json()
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
+    # Frontend को खुश रखने के लिए एक डमी (Dummy) Queue Response
+    return {
+        "status": "success", 
+        "data": [{"task_id": k, "status": "processing"} for k in active_tasks.keys()]
+    }
 
 if __name__ == "__main__":
     import uvicorn
