@@ -64,24 +64,39 @@ async def serve_docs_page():
 # 🛡️ PURE REST API PROXY (100% Stateless)
 # ==========================================
 @app.post("/api/generate")
+@app.post("/api/generate")
 async def gateway_generate(req: ImageRequestGateway):
     url = f"{BACKEND_SERVER_URL}/call/generate"
+    
+    # Gradio API को इसी JSON फॉर्मेट की सख्त ज़रूरत होती है
     payload = {
         "data": [
-            req.prompt, req.user_negative, req.style_name, 
-            req.ratio, req.custom_seed, req.use_random, IMGEN_API_KEY
+            req.prompt, 
+            req.user_negative, 
+            req.style_name, 
+            req.ratio, 
+            req.custom_seed, 
+            req.use_random, 
+            IMGEN_API_KEY
         ]
     }
     
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, headers=HEADERS, timeout=15.0)
+            # हम Gradio को 'POST' ही भेज रहे हैं, पर अब Payload एकदम सही है
+            resp = await client.post(url, json=payload, headers=HEADERS, timeout=20.0)
+            
             if resp.status_code != 200:
-                raise HTTPException(status_code=500, detail=f"Backend Error: {resp.text}")
+                print(f"🔥 BACKEND REJECTED: {resp.text}")
+                raise HTTPException(status_code=500, detail=f"Backend rejected the request: {resp.status_code}")
                 
-            # Gradio API हमें एक event_id देता है, जिसे हम task_id बना रहे हैं
+            # यह Gradio का 'event_id' है
             event_id = resp.json().get("event_id")
+            if not event_id:
+                raise HTTPException(status_code=500, detail="Backend did not return event_id")
+                
             return {"status": "accepted", "task_id": event_id, "cached": False}
+            
     except Exception as e:
         print(f"🔥 GATEWAY GENERATE ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
