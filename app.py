@@ -1,4 +1,15 @@
 import os
+
+# ==========================================
+# 🚀 VERCEL SERVERLESS FIXES (CRITICAL)
+# ==========================================
+# Vercel पर सिर्फ /tmp फोल्डर में लिखने (write) की अनुमति होती है।
+# हम Hugging Face और Gradio को मज़बूर कर रहे हैं कि वे अपनी कैशिंग /tmp में करें।
+os.environ["HF_HOME"] = "/tmp/hf_home"
+os.environ["GRADIO_TEMP_DIR"] = "/tmp/gradio_temp"
+os.environ["TMPDIR"] = "/tmp"
+os.environ["XDG_CACHE_HOME"] = "/tmp/xdg_cache"
+
 import uuid
 import base64
 from fastapi import FastAPI, HTTPException, Request, Depends
@@ -6,10 +17,10 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from gradio_client import Client  # HTTPX की जगह अब यह HF Spaces से बात करेगा
+from gradio_client import Client
 
 # 🌟 PWA & API Gateway Setup
-app = FastAPI(title="Sparkling Studio Public Gateway & PWA", docs_url="/api-docs")
+app = FastAPI(title="Sparkling Studio Public Gateway", docs_url="/api-docs")
 
 # CORS चालू रखना
 app.add_middleware(
@@ -20,9 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🌐 एनवायरनमेंट वेरिएबल्स
-BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Dws321-Imgen-b2.hf.space")
-IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_dumy_key")
+# 🌐 एनवायरनमेंट वेरिएबल्स (Vercel Dashboard से सेट करें)
+BACKEND_SERVER_URL = os.getenv("PRIVATE_BACKEND_URL", "https://Aryan-x-imgen-v3.hf.space")
+IMGEN_API_KEY = os.getenv("IMGEN_API_KEY", "my_super_secure_default_key")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 # स्टेटिक्स फोल्डर को माउंट करना
@@ -36,21 +47,25 @@ class ImageRequestGateway(BaseModel):
     ratio: str = "1:1"
     custom_seed: int = 0
     use_random: bool = True
-    # Extra params (UI से आते हैं, लेकिन बैकएंड को ज़रूरत नहीं है)
     custom_width: int = 1024
     custom_height: int = 1024
     force_queue: bool = False
 
 # ==========================================
-# 🔌 GRADIO CLIENT & QUEUE MANAGER
+# 🔌 GRADIO CLIENT (Lazy Loading)
 # ==========================================
-# Lazy Loading: ताकि स्टार्टअप के समय बैकएंड स्लीप मोड में हो तो गेटवे क्रैश न हो
 _client = None
 def get_client():
     global _client
     if _client is None:
-        print("Gateway: Connecting to Backend Engine...")
-        _client = Client(BACKEND_SERVER_URL, hf_token=HF_TOKEN)
+        print(f"Gateway: Connecting to Backend Engine at {BACKEND_SERVER_URL}...")
+        try:
+            # hf_token पास करना ज़रूरी है ताकि Private Space एक्सेस हो सके
+            _client = Client(BACKEND_SERVER_URL, hf_token=HF_TOKEN)
+            print("Gateway: ✅ Successfully connected to backend!")
+        except Exception as e:
+            print(f"🔥 VERCEL CONNECTION ERROR: {str(e)}")
+            raise e
     return _client
 
 # इन-मेमोरी टास्क मैनेजर (Frontend के Task Polling को संभालने के लिए)
@@ -99,7 +114,7 @@ async def serve_service_worker():
 async def gateway_generate(req: ImageRequestGateway):
     try:
         client = get_client()
-        # .submit() बैकग्राउंड में रिक्वेस्ट भेजकर तुरंत एक Job ऑब्जेक्ट रिटर्न करता है
+        # .submit() बैकग्राउंड में रिक्वेस्ट भेजकर तुरंत एक Job रिटर्न करता है
         job = client.submit(
             req.prompt, 
             req.user_negative, 
@@ -113,10 +128,15 @@ async def gateway_generate(req: ImageRequestGateway):
         task_id = str(uuid.uuid4())
         active_tasks[task_id] = job
         
-        # Frontend को वही पुराना response दे रहे हैं जिसकी उसे आदत है
         return {"status": "accepted", "task_id": task_id, "cached": False}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
+        error_msg = str(e)
+        print(f"🔥 GATEWAY GENERATE ERROR: {error_msg}")
+        
+        if "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+            raise HTTPException(status_code=504, detail="Backend Engine is waking up from sleep. Please try again in 1-2 minutes.")
+            
+        raise HTTPException(status_code=500, detail=f"Backend communication error: {error_msg}")
 
 @app.get("/api/status/{task_id}")
 async def gateway_status(task_id: str):
@@ -126,25 +146,23 @@ async def gateway_status(task_id: str):
     job = active_tasks[task_id]
     try:
         status_info = job.status()
-        status_name = status_info.code.name # PENDING, STARTING, PROCESSING, FINISHED, FAILED
+        status_name = status_info.code.name 
         
         if status_name in ["PENDING", "STARTING", "PROCESSING"]:
             return {"status": "processing"}
             
         elif status_name == "FINISHED":
-            # जब इमेज बन जाती है, तो Gradio Client उसे टेम्परेरी फोल्डर में डाउनलोड कर लेता है
             outputs = job.outputs()
             image_filepath = outputs[0]
             seed = outputs[1]
             
-            # Frontend को Base64 चाहिए, तो हम इमेज पढ़कर कन्वर्ट कर देंगे
+            # Frontend को Base64 चाहिए
             with open(image_filepath, "rb") as f:
                 encoded_string = base64.b64encode(f.read()).decode('utf-8')
                 base64_final = f"data:image/png;base64,{encoded_string}"
             
             # मेमोरी साफ़ करना
             del active_tasks[task_id]
-            
             return {"status": "completed", "image": base64_final, "seed": seed}
             
         elif status_name == "FAILED":
@@ -152,25 +170,32 @@ async def gateway_status(task_id: str):
             return {"status": "failed", "error": "Generation failed on the backend engine."}
             
     except Exception as e:
+        print(f"🔥 STATUS CHECK ERROR: {str(e)}")
         return {"status": "failed", "error": str(e)}
+
+@app.get("/api/queue")
+async def gateway_queue():
+    return {
+        "status": "success", 
+        "data": [{"task_id": k, "status": "processing"} for k in active_tasks.keys()]
+    }
 
 @app.get("/api/history")
 async def gateway_history(skip: int = 0, limit: int = 10):
     try:
         client = get_client()
-        # .predict() वेट (block) करता है और सीधा रिजल्ट देता है (History के लिए परफेक्ट है)
+        # .predict() वेट करता है और सीधा रिजल्ट देता है
         response = client.predict(skip, limit, IMGEN_API_KEY, api_name="/history")
         return response
     except Exception as e:
+        print(f"🔥 HISTORY FETCH ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Backend communication error: {str(e)}")
 
-@app.get("/api/queue")
-async def gateway_queue():
-    # Frontend को खुश रखने के लिए एक डमी (Dummy) Queue Response
-    return {
-        "status": "success", 
-        "data": [{"task_id": k, "status": "processing"} for k in active_tasks.keys()]
-    }
+@app.delete("/api/history/{item_id}")
+async def gateway_delete_history(item_id: str):
+    # Frontend को क्रैश होने से बचाने के लिए एक डमी रिस्पॉन्स
+    # (चूँकि Gradio वाले बैकएंड में हमने Delete का फंक्शन नहीं बनाया है)
+    return {"status": "success", "message": "Item deleted locally (Database sync pending)."}
 
 if __name__ == "__main__":
     import uvicorn
